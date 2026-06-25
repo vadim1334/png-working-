@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Image Converter</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #1e1f22;
+    color: #bcbec4;
+    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+
+  .card {
+    background: #2b2d30;
+    border: 1px solid #393b40;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 620px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+
+  .card-header {
+    background: #1e1f22;
+    border-bottom: 1px solid #393b40;
+    padding: 13px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .header-icon { font-size: 15px; opacity: .7; }
+  .card-title { font-size: 12px; color: #6e7175; }
+
+  .card-body { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+
+  .section {
+    background: #1e1f22;
+    border: 1px solid #393b40;
+    border-radius: 8px;
+    padding: 18px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #6e7175;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+  }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed #393b40;
+    border-radius: 8px;
+    padding: 32px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.over {
+    border-color: #7c5cbf;
+    background: rgba(124,92,191,.07);
+  }
+  .drop-zone input {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon { font-size: 32px; margin-bottom: 8px; }
+  .drop-text { font-size: 13px; color: #bcbec4; }
+  .drop-hint { font-size: 11px; color: #4e5157; margin-top: 4px; }
+  #file-name { font-size: 12px; color: #7c5cbf; margin-top: 10px; min-height: 16px; word-break: break-all; }
+
+  /* Row / field */
+  .row { display: flex; gap: 12px; }
+  .field { flex: 1; }
+  .field-label {
+    display: block; font-size: 11px; color: #6e7175;
+    margin-bottom: 6px; letter-spacing: .04em;
+  }
+
+  select, input[type=number] {
+    width: 100%;
+    background: #2b2d30;
+    border: 1px solid #4e5157;
+    border-radius: 6px;
+    color: #bcbec4;
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+    transition: border-color .2s;
+    -webkit-appearance: none;
+  }
+  select:focus, input[type=number]:focus { border-color: #7c5cbf; }
+
+  /* Toggle buttons */
+  .toggle-row { display: flex; gap: 8px; }
+  .toggle-btn {
+    flex: 1;
+    background: #2b2d30;
+    border: 1px solid #4e5157;
+    border-radius: 6px;
+    color: #6e7175;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 8px;
+    cursor: pointer;
+    transition: all .15s;
+    text-align: center;
+    user-select: none;
+  }
+  .toggle-btn.active {
+    background: rgba(124,92,191,.15);
+    border-color: #7c5cbf;
+    color: #c49ef5;
+  }
+
+  .sub-section { display: none; margin-top: 14px; }
+  .sub-section.visible { display: block; }
+  .hint { font-size: 11px; color: #4e5157; margin-top: 8px; }
+
+  /* ── CROP CANVAS ── */
+  #crop-area {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+    cursor: crosshair;
+    user-select: none;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  #crop-area img {
+    display: block;
+    max-width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+    border-radius: 6px;
+  }
+  #crop-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* dark overlay outside selection */
+  .crop-shadow {
+    position: absolute;
+    background: rgba(0,0,0,.55);
+    pointer-events: none;
+  }
+  /* selection box */
+  #crop-sel {
+    position: absolute;
+    border: 2px solid #7c5cbf;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.55);
+    pointer-events: none;
+    display: none;
+  }
+  /* handles */
+  .crop-handle {
+    position: absolute;
+    width: 10px; height: 10px;
+    background: #c49ef5;
+    border-radius: 2px;
+    pointer-events: all;
+  }
+  .crop-handle.tl { top:-5px; left:-5px; cursor: nwse-resize; }
+  .crop-handle.tr { top:-5px; right:-5px; cursor: nesw-resize; }
+  .crop-handle.bl { bottom:-5px; left:-5px; cursor: nesw-resize; }
+  .crop-handle.br { bottom:-5px; right:-5px; cursor: nwse-resize; }
+
+  #crop-info {
+    font-size: 11px; color: #7c5cbf; margin-top: 8px; text-align: center; min-height: 16px;
+  }
+
+  #crop-wrap { text-align: center; width: 100%; }
+
+  /* ── img info bar ── */
+  #img-info { font-size: 11px; color: #6e7175; margin-top: 6px; text-align: center; }
+
+  /* Convert button */
+  .btn-convert {
+    width: 100%;
+    background: linear-gradient(135deg, #7c5cbf, #6340a8);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 13px;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+    letter-spacing: .03em;
+  }
+  .btn-convert:hover { opacity: .9; }
+  .btn-convert:active { transform: scale(.99); }
+
+  .error-box {
+    background: rgba(220,50,47,.1);
+    border: 1px solid rgba(220,50,47,.3);
+    border-radius: 6px;
+    color: #ff6b6b;
+    font-size: 12px;
+    padding: 10px 14px;
+  }
+
+  canvas { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <span class="header-icon">🖼</span>
+    <span class="card-title">image-converter // no server required</span>
+  </div>
+
+  <div class="card-body">
+    <div id="error-box" class="error-box" style="display:none"></div>
+
+    <!-- Upload -->
+    <div class="section">
+      <div class="section-label">// input</div>
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept=".png,.webp,.jpg,.jpeg,.gif,.bmp">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">Перетащите файл или кликните</div>
+        <div class="drop-hint">PNG · WEBP · JPG · GIF · BMP</div>
+        <div id="file-name"></div>
+      </div>
+      <div id="preview-wrap" style="display:none; margin-top:14px; text-align:center;">
+        <img id="preview-img" src="" alt="preview" style="max-width:100%;max-height:180px;border-radius:6px;border:1px solid #393b40;">
+        <div id="img-info"></div>
+      </div>
+    </div>
+
+    <!-- Format -->
+    <div class="section">
+      <div class="section-label">// output format</div>
+      <div class="row">
+        <div class="field">
+          <label class="field-label">Формат</label>
+          <select id="fmt-select">
+            <option value="jpeg">JPG</option>
+            <option value="png">PNG</option>
+            <option value="webp">WEBP</option>
+          </select>
+        </div>
+        <div class="field" id="quality-field">
+          <label class="field-label">Качество (1–100)</label>
+          <input type="number" id="quality" value="90" min="1" max="100">
+        </div>
+      </div>
+    </div>
+
+    <!-- Transform -->
+    <div class="section">
+      <div class="section-label">// transform</div>
+      <div class="toggle-row">
+        <div class="toggle-btn" id="btn-resize" onclick="toggleMode('resize')">⇲ Resize</div>
+        <div class="toggle-btn" id="btn-crop"   onclick="toggleMode('crop')">✂ Crop</div>
+      </div>
+
+      <!-- Resize -->
+      <div class="sub-section" id="section-resize">
+        <div class="row">
+          <div class="field">
+            <label class="field-label">Ширина (px)</label>
+            <input type="number" id="rw" min="1" placeholder="800">
+          </div>
+          <div class="field">
+            <label class="field-label">Высота (px)</label>
+            <input type="number" id="rh" min="1" placeholder="600">
+          </div>
+        </div>
+        <div class="hint">// оставьте одно поле пустым — пропорции сохранятся</div>
+      </div>
+
+      <!-- Crop visual -->
+      <div class="sub-section" id="section-crop">
+        <div id="crop-no-img" class="hint" style="display:block;">// сначала загрузите изображение</div>
+        <div id="crop-wrap" style="display:none;">
+          <div id="crop-area">
+            <img id="crop-img" src="" alt="">
+            <div id="crop-sel">
+              <div class="crop-handle tl" data-h="tl"></div>
+              <div class="crop-handle tr" data-h="tr"></div>
+              <div class="crop-handle bl" data-h="bl"></div>
+              <div class="crop-handle br" data-h="br"></div>
+            </div>
+          </div>
+          <div id="crop-info"></div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-convert" onclick="convert()">Convert &amp; Download</button>
+  </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+  let imgEl = null, origW = 0, origH = 0;
+  let activeMode = '';
+
+  // ── crop state (in display px) ──
+  let cropX = 0, cropY = 0, cropW = 0, cropH = 0;
+  let dragging = false, resizeHandle = null;
+  let startMX = 0, startMY = 0, startCrop = {};
+
+  // ── file load ──
+  document.getElementById('file-input').addEventListener('change', e => loadFile(e.target.files[0]));
+
+  const dz = document.getElementById('drop-zone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); loadFile(e.dataTransfer.files[0]); });
+
+  function loadFile(file) {
+    if (!file) return;
+    document.getElementById('file-name').textContent = file.name;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      imgEl = img;
+      origW = img.naturalWidth;
+      origH = img.naturalHeight;
+      document.getElementById('preview-img').src = url;
+      document.getElementById('img-info').textContent = `${origW} × ${origH} px  ·  ${(file.size/1024).toFixed(1)} KB`;
+      document.getElementById('preview-wrap').style.display = 'block';
+      // set crop image
+      document.getElementById('crop-img').src = url;
+      document.getElementById('crop-img').onload = initCropArea;
+      document.getElementById('crop-no-img').style.display = 'none';
+      document.getElementById('crop-wrap').style.display = 'block';
+      hideError();
+    };
+    img.src = url;
+  }
+
+  // ── format ──
+  document.getElementById('fmt-select').addEventListener('change', function() {
+    document.getElementById('quality-field').style.display = this.value === 'png' ? 'none' : '';
+  });
+
+  // ── toggle ──
+  function toggleMode(mode) {
+    activeMode = activeMode === mode ? '' : mode;
+    ['resize','crop'].forEach(m => {
+      document.getElementById('section-'+m).classList.toggle('visible', activeMode === m);
+      document.getElementById('btn-'+m).classList.toggle('active', activeMode === m);
+    });
+  }
+
+  // ── CROP LOGIC ──
+  function initCropArea() {
+    const area = document.getElementById('crop-area');
+    const img  = document.getElementById('crop-img');
+    const dw = img.offsetWidth, dh = img.offsetHeight;
+    // default: full image minus 10% padding
+    const pad = Math.min(dw, dh) * 0.1;
+    cropX = pad; cropY = pad;
+    cropW = dw - pad*2; cropH = dh - pad*2;
+    drawSel();
+    bindCropEvents();
+  }
+
+  function drawSel() {
+    const sel = document.getElementById('crop-sel');
+    sel.style.display = 'block';
+    sel.style.left   = cropX + 'px';
+    sel.style.top    = cropY + 'px';
+    sel.style.width  = cropW + 'px';
+    sel.style.height = cropH + 'px';
+    // info in real pixels
+    const img = document.getElementById('crop-img');
+    const scaleX = origW / img.offsetWidth;
+    const scaleY = origH / img.offsetHeight;
+    const rx = Math.round(cropX * scaleX);
+    const ry = Math.round(cropY * scaleY);
+    const rw = Math.round(cropW * scaleX);
+    const rh = Math.round(cropH * scaleY);
+    document.getElementById('crop-info').textContent =
+      `x:${rx}  y:${ry}  →  ${rw} × ${rh} px`;
+  }
+
+  function bindCropEvents() {
+    const area = document.getElementById('crop-area');
+    const sel  = document.getElementById('crop-sel');
+
+    // drag selection box
+    sel.addEventListener('mousedown', e => {
+      if (e.target.dataset.h) return; // handle takes over
+      e.preventDefault();
+      dragging = true; resizeHandle = null;
+      startMX = e.clientX; startMY = e.clientY;
+      startCrop = { x: cropX, y: cropY, w: cropW, h: cropH };
+    });
+
+    // drag handles
+    sel.querySelectorAll('.crop-handle').forEach(h => {
+      h.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        dragging = true; resizeHandle = h.dataset.h;
+        startMX = e.clientX; startMY = e.clientY;
+        startCrop = { x: cropX, y: cropY, w: cropW, h: cropH };
+      });
+    });
+
+    // new selection by drawing
+    area.addEventListener('mousedown', e => {
+      if (e.target === sel || e.target.dataset.h) return;
+      e.preventDefault();
+      const r = area.getBoundingClientRect();
+      cropX = e.clientX - r.left;
+      cropY = e.clientY - r.top;
+      cropW = 0; cropH = 0;
+      dragging = true; resizeHandle = 'br';
+      startMX = e.clientX; startMY = e.clientY;
+      startCrop = { x: cropX, y: cropY, w: 0, h: 0 };
+      drawSel();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const img = document.getElementById('crop-img');
+      const maxW = img.offsetWidth, maxH = img.offsetHeight;
+      const dx = e.clientX - startMX, dy = e.clientY - startMY;
+
+      if (!resizeHandle) {
+        // move
+        cropX = clamp(startCrop.x + dx, 0, maxW - cropW);
+        cropY = clamp(startCrop.y + dy, 0, maxH - cropH);
+      } else {
+        let { x, y, w, h } = startCrop;
+        if (resizeHandle.includes('r')) w = clamp(w + dx, 10, maxW - x);
+        if (resizeHandle.includes('b')) h = clamp(h + dy, 10, maxH - y);
+        if (resizeHandle.includes('l')) { const nx = clamp(x + dx, 0, x + w - 10); w = w - (nx - x); x = nx; }
+        if (resizeHandle.includes('t')) { const ny = clamp(y + dy, 0, y + h - 10); h = h - (ny - y); y = ny; }
+        cropX = x; cropY = y; cropW = w; cropH = h;
+      }
+      drawSel();
+    });
+
+    document.addEventListener('mouseup', () => { dragging = false; resizeHandle = null; });
+  }
+
+  function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
+
+  // ── CONVERT ──
+  function showError(msg) { const b = document.getElementById('error-box'); b.textContent = '⚠ ' + msg; b.style.display = 'block'; }
+  function hideError()    { document.getElementById('error-box').style.display = 'none'; }
+
+  function convert() {
+    hideError();
+    if (!imgEl) { showError('Сначала выберите файл'); return; }
+
+    const fmt     = document.getElementById('fmt-select').value;
+    const quality = parseInt(document.getElementById('quality').value) / 100;
+    const canvas  = document.getElementById('canvas');
+    const ctx     = canvas.getContext('2d');
+
+    let sx = 0, sy = 0, sw = origW, sh = origH;
+    let dw = origW, dh = origH;
+
+    if (activeMode === 'crop' && cropW > 0 && cropH > 0) {
+      const img = document.getElementById('crop-img');
+      const scaleX = origW / img.offsetWidth;
+      const scaleY = origH / img.offsetHeight;
+      sx = Math.round(cropX * scaleX);
+      sy = Math.round(cropY * scaleY);
+      sw = Math.round(cropW * scaleX);
+      sh = Math.round(cropH * scaleY);
+      dw = sw; dh = sh;
+    }
+
+    if (activeMode === 'resize') {
+      let rw = parseInt(document.getElementById('rw').value) || 0;
+      let rh = parseInt(document.getElementById('rh').value) || 0;
+      if (!rw && !rh) { showError('Укажите хотя бы одну сторону для resize'); return; }
+      if (rw && !rh) rh = Math.round(sh * rw / sw);
+      if (rh && !rw) rw = Math.round(sw * rh / sh);
+      dw = rw; dh = rh;
+    }
+
+    canvas.width = dw; canvas.height = dh;
+    ctx.clearRect(0, 0, dw, dh);
+    ctx.drawImage(imgEl, sx, sy, sw, sh, 0, 0, dw, dh);
+
+    const mimeMap = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+    const extMap  = { jpeg: 'jpg', png: 'png', webp: 'webp' };
+
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      const base = (document.getElementById('file-name').textContent || 'image').replace(/\.[^.]+$/, '');
+      a.href = url; a.download = `${base}.${extMap[fmt]}`;
+      a.click(); URL.revokeObjectURL(url);
+    }, mimeMap[fmt], fmt === 'png' ? undefined : quality);
+  }
+</script>
+</body>
+</html>
